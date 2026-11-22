@@ -1,0 +1,7 @@
+[package]
+name = "loom-core"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+bevy_ecs = { path = "../../vendor/bevy_ecs", features = ["multi_threaded"] }

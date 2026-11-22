@@ -1,0 +1,8 @@
+[package]
+name = "bevy_ecs"
+version = "0.0.0"
+edition = "2024"
+
+[features]
+default = ["multi_threaded"]
+multi_threaded = []

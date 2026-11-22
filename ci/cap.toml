@@ -1,0 +1,3 @@
+[fleet.loom]
+line_cap = 6500
+count = ["crates/*/src/**/*.rs", "xtask/src/**/*.rs"]

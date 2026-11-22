@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+[ -f "$here/clippy.toml" ] || { echo "sim-lints: no list at $here/clippy.toml" >&2; exit 1; }
+[ "$#" -gt 0 ] || { echo "usage: ci/sim-lints/run -p <package>..." >&2; exit 2; }
+export CLIPPY_CONF_DIR="$here"
+cargo clippy --quiet --locked "$@" -- -D warnings
+out=${CARGO_TARGET_DIR:-$PWD/target}/sim-lints
+mkdir -p "$out"
+log=$out/fixtures.log
+: >"$log"
+for file in "$here"/fixture/src/*.rs; do
+    clippy-driver --edition 2024 --crate-type lib --crate-name fixture --emit metadata --out-dir "$out" \
+        --error-format short -A warnings -D clippy::disallowed_methods -D clippy::disallowed_types \
+        "$file" >>"$log" 2>&1 || true
+done
+failed=0
+if grep -q 'error\[E' "$log"; then
+    grep 'error\[E' "$log" >&2
+    failed=1
+fi
+for line in $(awk '!/^pub fn / && !/^}$/ { print FILENAME ":" FNR ":" }' "$here"/fixture/src/*.rs); do
+    if ! grep -q "^$line.*: error: use of a disallowed" "$log"; then
+        echo "sim-lints: $line is not refused" >&2
+        failed=1
+    fi
+done
+for path in $(sed -n 's/.*path = "\([^"]*\)".*/\1/p' "$here/clippy.toml"); do
+    if ! grep -q "use of a disallowed [a-z]* \`$path\`" "$log"; then
+        echo "sim-lints: no fixture line is refused by $path" >&2
+        failed=1
+    fi
+done
+[ "$failed" = 0 ] && echo "$(ls "$here"/fixture/src/*.rs | wc -l | tr -d ' ') fixtures refused"
+exit "$failed"

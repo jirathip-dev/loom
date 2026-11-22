@@ -1,0 +1,10 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main, staging]
+jobs:
+  gates:
+    uses: jirathip-dev/gatekeeper/.github/workflows/gates.yml@c76c64fa790a1a5e5e608c25139960e74db8b44d # v1.1.0
+    secrets:
+      private-names: ${{ secrets.PRIVATE_NAMES }}

@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+if [ -n "$(git ls-files --unmerged -- Cargo.lock)" ]; then
+    git rev-parse --verify --quiet MERGE_HEAD >/dev/null || {
+        echo "ci/lock: Cargo.lock is conflicted outside a merge: take the integration branch's Cargo.lock, then run this again" >&2
+        exit 1
+    }
+    git show MERGE_HEAD:Cargo.lock >Cargo.lock
+fi
+cargo update --workspace --quiet
