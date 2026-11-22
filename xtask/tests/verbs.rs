@@ -15,6 +15,7 @@ fn an_unknown_verb_is_refused_naming_the_verbs() {
 }
 
 #[test]
+#[cfg(unix)]
 fn check_passes_the_wrappers_exit_code_on() {
     let out = xtask(&["check", "--gate", "no/such-gate"]);
     assert_eq!(out.status.code(), Some(2));
