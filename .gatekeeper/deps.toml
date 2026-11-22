@@ -1,0 +1,9 @@
+growth = 10
+
+[cargo]
+serde_json = "xtask tests: the crate-rules graph test reads cargo metadata; loom-core: the state registry values and the JSON-lines input log"
+bevy_ecs = "loom-core: the ECS world, queries for in_order and the single-threaded schedule runner (decision 001)"
+rand_pcg = "loom-core: one PCG stream per system (decision 001)"
+serde = "loom-core: the canonical writer is a serde Serializer; state, logs and headers derive it (decision 001)"
+xxhash-rust = "loom-core: the XXH3-128 state hash and the stream selector (decision 001)"
+glam = "loom-core: pins glam onto libm (R6) for the copy bevy_ecs's optional reflect reaches"

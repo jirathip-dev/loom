@@ -1,0 +1,1 @@
+- don't add a game's data or kept images (enforced by: no-game-data `! git ls-files | grep -E '\.(ron|png)$'`, active since 2026-11-21)

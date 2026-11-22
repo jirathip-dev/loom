@@ -1,0 +1,21 @@
+[graph]
+all-features = true
+
+[advisories]
+yanked = "deny"
+
+[licenses]
+allow = ["Apache-2.0", "BSL-1.0", "MIT", "Unicode-3.0", "Zlib"]
+private = { ignore = true }
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+skip = [
+    { crate = "hashbrown@0.16.1", reason = "bevy_platform 0.20 pins hashbrown 0.16; indexmap is on 0.17 (decision 001)" },
+    { crate = "syn@2.0.119", reason = "bevy's derive macros are on syn 2; serde_derive and thiserror moved to syn 3 (decision 001)" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

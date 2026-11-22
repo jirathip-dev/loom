@@ -1,0 +1,7 @@
+about = "every unit and integration test of the workspace, on macOS"
+fix = "fix the failing test the log names; it may fail on macOS alone"
+budget_secs = 240
+setup = ["rust"]
+leg = "macos"
+paths = ["**/*.rs", "**/Cargo.toml", "Cargo.lock", "ci/lock"]
+run = "cargo test --workspace --locked"

@@ -1,0 +1,25 @@
+name: docs
+on:
+  pull_request:
+  push:
+    branches: [staging, main]
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: every tracked TOML file parses
+        run: git ls-files '*.toml' | python3 -c 'import sys, tomllib; [tomllib.load(open(p, "rb")) for p in sys.stdin.read().split()]'
+      - name: every relative markdown link resolves
+        run: |
+          status=0
+          while IFS= read -r file; do
+            dir=$(dirname "$file")
+            while IFS= read -r target; do
+              path="${target%%#*}"
+              [ -z "$path" ] && continue
+              [ -e "$dir/$path" ] || { echo "$file: broken link $target"; status=1; }
+            done < <(grep -oE '\]\([^)]+\)' "$file" | sed -E 's/^\]\(//; s/\)$//' | grep -vE '^[a-z]+:' || true)
+          done < <(git ls-files '*.md')
+          exit $status

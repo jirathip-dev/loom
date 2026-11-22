@@ -1,0 +1,6 @@
+about = "every unit and integration test of the workspace"
+fix = "fix the failing test the log names"
+budget_secs = 240
+setup = ["rust"]
+paths = ["**/*.rs", "**/Cargo.toml", "Cargo.lock", "ci/lock"]
+run = "cargo test --workspace --locked"

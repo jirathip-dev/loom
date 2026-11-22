@@ -1,0 +1,46 @@
+frozen = [".github/workflows/ci.yml", "docs/DECISIONS.md"]
+generated = ["Cargo.lock"]
+generate = "ci/lock"
+
+[[collect]]
+dir = ".gatekeeper/gates"
+glob = "*.toml"
+
+[[collect]]
+dir = "docs/decisions"
+glob = "*.md"
+
+[[collect]]
+dir = "ci/sim-lints/fixture/src"
+glob = "*.rs"
+
+[[collect]]
+dir = "xtask/tests/fixtures/crate-rules"
+glob = "**"
+
+[[ban]]
+pattern = "std::fs"
+paths = ["crates/*/src/**"]
+reason = "a library takes and returns values; only a binary reads or writes a file (R10)"
+
+[[ban]]
+pattern = "cargo "
+paths = [".github/workflows/ci.yml"]
+reason = "a gate is a file in .gatekeeper/gates/; ci.yml only calls gatekeeper"
+
+[[ban]]
+pattern = "self-hosted"
+paths = [".github/**", ".gatekeeper/**"]
+reason = "a public repo runs on GitHub's hosted runners only"
+
+[[ban]]
+pattern = "pull_request_target"
+paths = [".github/**"]
+reason = "a fork's pull request never runs with this repo's secrets"
+
+[[size]]
+paths = ["crates/*/src/**/*.rs", "xtask/src/**/*.rs"]
+max_file_lines = 600
+
+[comments]
+policy = "strict"
