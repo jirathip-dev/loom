@@ -109,3 +109,28 @@ fn a_state_saved_as_json_restores_to_the_same_hash() -> Result<(), Box<dyn std::
     assert_eq!(restored.hash()?, state.hash()?);
     Ok(())
 }
+
+#[derive(Resource)]
+struct Ground;
+
+#[test]
+fn a_derived_resource_is_neither_saved_nor_hashed_and_is_known_as_derived()
+-> Result<(), Box<dyn std::error::Error>> {
+    let registry = registry().derived::<Ground>("Ground");
+    let mut with = forward();
+    with.insert_resource(Ground);
+
+    assert_eq!(registry.unregistered(&with), 0);
+    assert_eq!(self::registry().unregistered(&with), 1);
+    let state = registry.capture(&mut with)?;
+    assert_eq!(state, registry.capture(&mut forward())?);
+    assert!(
+        !state
+            .resources
+            .contains_key(&SectionName("Ground".to_owned()))
+    );
+    assert_eq!(state.hash()?, registry.capture(&mut forward())?.hash()?);
+    assert!(registry.is_derived("Ground"));
+    assert!(!registry.is_derived("Clock"));
+    Ok(())
+}
