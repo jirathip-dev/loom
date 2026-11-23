@@ -1,4 +1,4 @@
-# loom-procgen (planned)
+# loom-procgen
 
 Recipes in, plain data out. No GPU, no threads, no files, no clock. A game's simulation calls it, so it runs
 under the determinism lints (D1 to D6, `determinism.md`). Names below are decided; exact bounds and private
@@ -48,6 +48,8 @@ pub struct Pixels { pub size: (u32, u32), pub rgba: Vec<u8> }
 - A `Terrain` is made once from the seed and the recipe and never saved: a load makes it again.
 
 ## Recipes
+
+`Map` and `Biome` are built; `Model`, `Sky` and `fibre_map` are planned.
 
 Plain `serde` types; the caller reads them from wherever it keeps its data.
 

@@ -1,0 +1,17 @@
+[package]
+name = "loom-procgen"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam = { version = "0.33.12", default-features = false, features = ["std", "libm"] }
+libm = "0.2.16"
+loom-core = { path = "../loom-core", version = "0.0.0" }
+serde = { version = "1.0.229", features = ["derive"] }
+
+[lints]
+workspace = true

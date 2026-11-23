@@ -5,7 +5,8 @@
 ```
 crates/loom-core/      built     ticks, ids, random streams, canonical writer and state hash, state registry,
                                  input log, save header, the single-threaded schedule runner
-crates/loom-procgen/   planned   terrain, chunk meshes, soft-part meshes, a fibre texture, a sky (procgen.md)
+crates/loom-procgen/   built     seeded terrain and chunk meshes; planned: soft-part meshes, a fibre texture, a sky
+                                 (procgen.md)
 crates/loom-render/    planned   the wgpu renderer; the one crate that may hold `unsafe` (render.md)
 crates/loom-app/       planned   the winit window and loop, the pacer, input actions (app.md)
 crates/loom-ui/        later     an in-game UI, after its own decision

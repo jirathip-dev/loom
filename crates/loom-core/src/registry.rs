@@ -76,6 +76,7 @@ struct Entry<K> {
 pub struct Registry {
     components: BTreeMap<&'static str, Entry<Entity>>,
     resources: BTreeMap<&'static str, Entry<()>>,
+    derived: BTreeMap<&'static str, TypeId>,
 }
 
 impl Registry {
@@ -121,6 +122,19 @@ impl Registry {
         self
     }
 
+    /// Registers resource `T` under `name` as derived: made again from the state, never saved or hashed.
+    #[must_use]
+    pub fn derived<T: Resource>(mut self, name: &'static str) -> Self {
+        self.derived.insert(name, TypeId::of::<T>());
+        self
+    }
+
+    /// Whether `name` is registered as derived.
+    #[must_use]
+    pub fn is_derived(&self, name: &str) -> bool {
+        self.derived.contains_key(name)
+    }
+
     /// The names of the registered components, in name order.
     pub fn components(&self) -> impl Iterator<Item = &'static str> {
         self.components.keys().copied()
@@ -134,6 +148,7 @@ impl Registry {
             .values()
             .map(|entry| entry.type_id)
             .chain(self.resources.values().map(|entry| entry.type_id))
+            .chain(self.derived.values().copied())
             .chain([
                 TypeId::of::<SimId>(),
                 TypeId::of::<Tick>(),

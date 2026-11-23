@@ -1,6 +1,6 @@
-about = "clippy with the sim-only lists in ci/sim-lints on loom-core; every fixture refused, every list entry hit"
+about = "clippy with the sim-only lists in ci/sim-lints on loom-core and loom-procgen; every fixture refused, every list entry hit"
 fix = "use the safe form the lint's reason names; a new list entry needs a fixture under ci/sim-lints/fixture/src that it refuses"
 budget_secs = 90
 setup = ["rust"]
-paths = ["crates/loom-core/**", "ci/sim-lints/**"]
-run = "ci/sim-lints/run -p loom-core"
+paths = ["crates/loom-core/**", "crates/loom-procgen/**", "ci/sim-lints/**"]
+run = "ci/sim-lints/run -p loom-core -p loom-procgen"
