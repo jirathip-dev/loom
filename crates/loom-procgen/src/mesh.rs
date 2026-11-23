@@ -55,16 +55,20 @@ impl Lod {
 
 impl MeshData {
     fn vertex(&mut self, at: Vec3, normal: Vec3, colour: [u8; 4]) -> u32 {
-        let index = u32::try_from(self.at.len()).unwrap_or(u32::MAX);
         let chunk = metres(CHUNK_METRES);
-        self.uv.push(Vec2::new(at.x / chunk, at.z / chunk));
+        self.push(at, normal, Vec2::new(at.x / chunk, at.z / chunk), colour)
+    }
+
+    pub(crate) fn push(&mut self, at: Vec3, normal: Vec3, uv: Vec2, colour: [u8; 4]) -> u32 {
+        let index = u32::try_from(self.at.len()).unwrap_or(u32::MAX);
         self.at.push(at);
         self.normal.push(normal);
+        self.uv.push(uv);
         self.colour.push(colour);
         index
     }
 
-    fn quad(&mut self, a: u32, b: u32, c: u32, d: u32) {
+    pub(crate) fn quad(&mut self, a: u32, b: u32, c: u32, d: u32) {
         self.index.extend([a, c, b, b, c, d]);
     }
 }

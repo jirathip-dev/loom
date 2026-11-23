@@ -49,7 +49,7 @@ pub struct Pixels { pub size: (u32, u32), pub rgba: Vec<u8> }
 
 ## Recipes
 
-`Map` and `Biome` are built; `Model`, `Sky` and `fibre_map` are planned.
+`Map`, `Biome` and `Model` are built; `Sky` and `fibre_map` are planned.
 
 Plain `serde` types; the caller reads them from wherever it keeps its data.
 
@@ -81,6 +81,9 @@ pub fn fibre_map(seed: Seed, size: u32) -> Pixels;
 
 - A model is a handful of soft parts joined together: balls, rolls and flat patches. No skeleton, no
   skinning. `Moves` says how much each procedural motion (hop, squash, wobble) moves that part.
+- `Model::meshes` gives one closed mesh a part, in the parts' order, centred at the part's `at`, so a caller
+  moves a part as a whole. A ball spans its three radii; a roll lies along x, `length` between the centres
+  of its two half-ball ends; a patch is a 1 cm thick oval of felt `size` across in x and y, facing z.
 - `Felt` is the cloth material's parameters, handed to the renderer as they are.
 - `Sky::at` gives the one light's direction and colour, the sky and the ambient light for a time of day,
   blended between the keys.

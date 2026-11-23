@@ -8,7 +8,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-glam = { version = "0.33.12", default-features = false, features = ["std", "libm"] }
+glam = { version = "0.33.12", default-features = false, features = ["std", "libm", "serde"] }
 libm = "0.2.16"
 loom-core = { path = "../loom-core", version = "0.0.0" }
 serde = { version = "1.0.229", features = ["derive"] }
