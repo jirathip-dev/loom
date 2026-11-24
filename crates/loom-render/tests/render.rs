@@ -1,3 +1,4 @@
+use glam::camera::rh::{proj::directx, view::look_at_mat4};
 use loom_render::{Eye, Gpu, Instance, Light, Mat4, Material, Scene, Vec3, Vertex};
 use std::f32::consts::PI;
 
@@ -32,12 +33,16 @@ fn vertex(at: Vec3, normal: Vec3, uv: [f32; 2]) -> Vertex {
     }
 }
 
+fn ratio(n: u32, d: u32) -> f32 {
+    f32::from(u16::try_from(n).unwrap()) / f32::from(u16::try_from(d).unwrap())
+}
+
 fn ball() -> (Vec<Vertex>, Vec<u32>) {
     let (stacks, slices) = (48u32, 96u32);
     let mut vertices = Vec::new();
     for i in 0..=stacks {
         for j in 0..=slices {
-            let (u, v) = (j as f32 / slices as f32, i as f32 / stacks as f32);
+            let (u, v) = (ratio(j, slices), ratio(i, stacks));
             let (theta, phi) = (v * PI, u * 2.0 * PI);
             let n = Vec3::new(
                 theta.sin() * phi.cos(),
@@ -70,8 +75,8 @@ fn plane() -> (Vec<Vertex>, Vec<u32>) {
 
 fn eye() -> Eye {
     Eye {
-        view: Mat4::look_at_rh(EYE, Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
-        proj: Mat4::perspective_rh(PI / 4.0, 16.0 / 9.0, 0.1, 100.0),
+        view: look_at_mat4(EYE, Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
+        proj: directx::perspective(PI / 4.0, 16.0 / 9.0, 0.1, 100.0),
     }
 }
 
@@ -114,13 +119,19 @@ fn render(gpu: &mut Gpu, sheen: [f32; 3]) -> Vec<u8> {
 fn brightness(image: &[u8], world: Vec3) -> u32 {
     let clip = eye().proj * eye().view * world.extend(1.0);
     let ndc = clip.truncate() / clip.w;
-    let x = ((ndc.x + 1.0) * 0.5 * SIZE.0 as f32) as usize;
-    let y = ((1.0 - ndc.y) * 0.5 * SIZE.1 as f32) as usize;
+    let x = index(f32::midpoint(ndc.x, 1.0) * ratio(SIZE.0, 1));
+    let y = index(f32::midpoint(1.0, -ndc.y) * ratio(SIZE.1, 1));
     pixel(image, x, y)[..3].iter().map(|&c| u32::from(c)).sum()
 }
 
+fn index(coord: f32) -> usize {
+    (1..=u16::MAX)
+        .take_while(|&i| f32::from(i) <= coord)
+        .count()
+}
+
 fn pixel(image: &[u8], x: usize, y: usize) -> &[u8] {
-    let at = (y * SIZE.0 as usize + x) * 4;
+    let at = (y * usize::try_from(SIZE.0).unwrap() + x) * 4;
     &image[at..at + 4]
 }
 
@@ -158,13 +169,13 @@ fn the_background_is_the_sky_colour() {
         } else {
             1.055 * linear.powf(1.0 / 2.4) - 0.055
         };
-        (encoded * 255.0).round() as i32
+        encoded * 255.0
     };
     for (x, y) in [(10, 10), (960, 20), (1900, 60)] {
         let got = pixel(&image, x, y);
         for (channel, linear) in SKY.iter().enumerate() {
-            let diff = (i32::from(got[channel]) - srgb(*linear)).abs();
-            assert!(diff <= 1, "({x}, {y}) is {got:?}, sky is {SKY:?}");
+            let diff = (f32::from(got[channel]) - srgb(*linear)).abs();
+            assert!(diff <= 1.5, "({x}, {y}) is {got:?}, sky is {SKY:?}");
         }
     }
 }
