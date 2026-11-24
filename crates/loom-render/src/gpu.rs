@@ -154,9 +154,6 @@ fn ms(range: Range<Instant>) -> f32 {
 
 impl Gpu {
     /// A GPU that renders into an image of `size` pixels, with no window.
-    ///
-    /// # Errors
-    /// `NoAdapter` or `NoDevice` when this machine offers no usable GPU.
     pub fn offscreen(size: (u32, u32)) -> Result<Self, GpuError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
@@ -272,9 +269,6 @@ impl Gpu {
     }
 
     /// Renders `scene` into the image and waits for the GPU to finish it.
-    ///
-    /// # Errors
-    /// `FreedMesh` or `UnknownMaterial` when a draw names one this GPU does not hold.
     pub fn render(&mut self, scene: &Scene) -> Result<FrameStats, GpuError> {
         let start = Instant::now();
         let mut instances: Vec<Instance> = Vec::new();
@@ -394,9 +388,6 @@ impl Gpu {
     }
 
     /// The last rendered image: RGBA8 in sRGB, row by row from the top left.
-    ///
-    /// # Errors
-    /// `Readback` when the image cannot be copied back from the GPU.
     pub fn pixels(&mut self) -> Result<Vec<u8>, GpuError> {
         let size = extent(self.size);
         let row = size.width * 4;

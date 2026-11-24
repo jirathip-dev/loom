@@ -1,4 +1,8 @@
 #![deny(unsafe_code)]
+#![allow(
+    clippy::missing_errors_doc,
+    reason = "one doc line a public item; each error type names its failures"
+)]
 
 mod gpu;
 mod scene;

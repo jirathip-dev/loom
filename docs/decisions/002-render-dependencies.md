@@ -9,8 +9,9 @@ Status: accepted, 2026-11-24.
 | `wgpu` | loom-render | the GPU on Metal, DX12 and Vulkan; its `naga` validates every WGSL file in a test that needs no GPU | 30.0.2 |
 | `bytemuck` | loom-render | vertices, instances and uniforms as bytes, by derive | 1.25.2 |
 
-- `wgpu` is built with default features off and `std`, `dx12`, `metal`, `vulkan` and `wgsl` on: no GL and no
-  browser backend. The owner approved the 61 packages it adds to `Cargo.lock` (#6).
+- `wgpu` is built with default features off and `std`, `dx12`, `metal`, `vulkan`, `wgsl` and `naga-ir` on
+  (`naga-ir` for the shader test): no GL and no browser backend.
+  The owner approved the 61 packages it adds to `Cargo.lock` (#6).
 - `glam` gains its `bytemuck` feature for `Mat4` in an instance; it stays on `libm` (R6).
 - `deny.toml` allows the `ISC` licence (`libloading`, which loads the Vulkan library) and skips
   `rustc-hash` 1.1.0, which `naga` 30 uses while `bevy_ecs` reaches 2.
