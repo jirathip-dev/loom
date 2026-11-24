@@ -1,4 +1,4 @@
-# loom-render (planned)
+# loom-render
 
 The GPU through `wgpu`, game-blind. It knows meshes, materials, a sun, an eye and a list of draws; it knows no
 terrain, no simulation and no window library. It is the one crate that may hold `unsafe` (R5,
@@ -49,6 +49,10 @@ gpu.render(&scene)?;
 ```
 
 `Gpu::offscreen` and `pixels` render to an image with no window, for tests and for a caller's screenshots.
+
+Built so far: `offscreen`, `mesh`, `free`, `texture`, `material`, `render` and `pixels`; the lit pass, the sky
+and tone mapping with FXAA. A fibre texture's rgb is a tangent-space normal and its alpha the fibre's shade.
+Planned: `on_window`, `resize`, the shadow cascades, the prepass and ambient occlusion.
 
 ## Tests
 

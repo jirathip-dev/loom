@@ -4,6 +4,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const FORBID_UNSAFE: &str = "#![forbid(unsafe_code)]";
+const R5_LIFTED: &[(&str, &str)] = &[("loom-render", "#![deny(unsafe_code)]")];
+
+fn r5_root_attribute(name: &str) -> &'static str {
+    R5_LIFTED
+        .iter()
+        .find(|(lifted, _)| *lifted == name)
+        .map_or(FORBID_UNSAFE, |(_, attribute)| attribute)
+}
 
 struct Graph {
     members: BTreeSet<String>,
@@ -75,10 +83,11 @@ impl Graph {
                 }
             }
             if name.starts_with("loom-") {
+                let attribute = r5_root_attribute(name);
                 for root in self.crate_roots(id) {
                     let text = std::fs::read_to_string(&root).unwrap();
-                    if !text.lines().any(|line| line.trim() == FORBID_UNSAFE) {
-                        found.push(format!("R5: {} lacks {FORBID_UNSAFE}", root.display()));
+                    if !text.lines().any(|line| line.trim() == attribute) {
+                        found.push(format!("R5: {} lacks {attribute}", root.display()));
                     }
                 }
             }
@@ -132,6 +141,21 @@ fn assert_refused(name: &str, rule: &str) {
 fn the_workspace_keeps_the_crate_rules() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     assert_eq!(Graph::of(root).violations(), Vec::<String>::new());
+}
+
+#[test]
+fn the_r5_lifted_crates_are_gatekeepers_unsafe_crates() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let config = std::fs::read_to_string(root.join(".gatekeeper/config.toml")).unwrap();
+    let names: Vec<String> = R5_LIFTED
+        .iter()
+        .map(|(name, _)| format!("\"{name}\""))
+        .collect();
+    let line = format!("unsafe_crates = [{}]", names.join(", "));
+    assert!(
+        config.lines().any(|l| l.trim() == line),
+        "config.toml lacks `{line}`"
+    );
 }
 
 #[test]
