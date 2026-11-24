@@ -148,6 +148,22 @@ fn upload(
     texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
+fn frame_uniform(scene: &Scene) -> FrameUniform {
+    let eye = scene.eye.view.inverse().w_axis;
+    let light = scene.light.towards;
+    let [lr, lg, lb] = scene.light.colour;
+    let [ar, ag, ab] = scene.ambient;
+    let [sr, sg, sb] = scene.sky;
+    FrameUniform {
+        view_proj: scene.eye.proj * scene.eye.view,
+        eye: eye.to_array(),
+        towards: [light.x, light.y, light.z, 0.0],
+        light: [lr, lg, lb, 0.0],
+        ambient: [ar, ag, ab, 0.0],
+        sky: [sr, sg, sb, 0.0],
+    }
+}
+
 fn ms(range: Range<Instant>) -> f32 {
     range.end.duration_since(range.start).as_secs_f32() * 1000.0
 }
@@ -288,19 +304,7 @@ impl Gpu {
             let last = u32::try_from(instances.len()).unwrap_or(u32::MAX);
             draws.push((mesh, material, first..last));
         }
-        let eye = scene.eye.view.inverse().w_axis;
-        let light = scene.light.towards;
-        let [lr, lg, lb] = scene.light.colour;
-        let [ar, ag, ab] = scene.ambient;
-        let [sr, sg, sb] = scene.sky;
-        let frame = FrameUniform {
-            view_proj: scene.eye.proj * scene.eye.view,
-            eye: eye.to_array(),
-            towards: [light.x, light.y, light.z, 0.0],
-            light: [lr, lg, lb, 0.0],
-            ambient: [ar, ag, ab, 0.0],
-            sky: [sr, sg, sb, 0.0],
-        };
+        let frame = frame_uniform(scene);
         self.queue
             .write_buffer(&self.frame, 0, bytemuck::bytes_of(&frame));
         let instance_buffer = self
@@ -313,66 +317,9 @@ impl Gpu {
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("lit"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.targets.hdr,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.targets.depth,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_bind_group(0, &self.frame_group, &[]);
-            if !instances.is_empty() {
-                pass.set_pipeline(&self.lit.pipeline);
-                pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                for (mesh, material, range) in &draws {
-                    pass.set_bind_group(1, *material, &[]);
-                    pass.set_vertex_buffer(0, mesh.vertices.slice(..));
-                    pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..mesh.count, 0, range.clone());
-                }
-            }
-            pass.set_pipeline(&self.sky.pipeline);
-            pass.draw(0..3, 0..1);
-        }
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("tone"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.targets.output_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.tone.pipeline);
-            pass.set_bind_group(0, &self.targets.tone, &[]);
-            pass.draw(0..3, 0..1);
-        }
-        let encoded = Instant::now();
+        self.lit_pass(&mut encoder, &instance_buffer, &draws);
+        self.tone_pass(&mut encoder);
+        let submitted = Instant::now();
         self.queue.submit([encoder.finish()]);
         self.wait()?;
         let triangles = draws
@@ -380,11 +327,77 @@ impl Gpu {
             .map(|(mesh, _, range)| (mesh.count / 3).saturating_mul(range.end - range.start))
             .fold(0, u32::saturating_add);
         Ok(FrameStats {
-            cpu_ms: ms(start..encoded),
-            gpu_ms: ms(encoded..Instant::now()),
+            cpu_ms: ms(start..submitted),
+            gpu_ms: ms(submitted..Instant::now()),
             draws: u32::try_from(draws.len()).unwrap_or(u32::MAX),
             triangles,
         })
+    }
+
+    fn lit_pass(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        instances: &wgpu::Buffer,
+        draws: &[(&Mesh, &wgpu::BindGroup, Range<u32>)],
+    ) {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("lit"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &self.targets.hdr,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.targets.depth,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_bind_group(0, &self.frame_group, &[]);
+        if instances.size() > 0 {
+            pass.set_pipeline(&self.lit.pipeline);
+            pass.set_vertex_buffer(1, instances.slice(..));
+            for (mesh, material, range) in draws {
+                pass.set_bind_group(1, *material, &[]);
+                pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+                pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..mesh.count, 0, range.clone());
+            }
+        }
+        pass.set_pipeline(&self.sky.pipeline);
+        pass.draw(0..3, 0..1);
+    }
+
+    fn tone_pass(&self, encoder: &mut wgpu::CommandEncoder) {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("tone"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &self.targets.output_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.tone.pipeline);
+        pass.set_bind_group(0, &self.targets.tone, &[]);
+        pass.draw(0..3, 0..1);
     }
 
     /// The last rendered image: RGBA8 in sRGB, row by row from the top left.
