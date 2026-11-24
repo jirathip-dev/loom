@@ -7,7 +7,8 @@ crates/loom-core/      built     ticks, ids, random streams, canonical writer an
                                  input log, save header, the single-threaded schedule runner
 crates/loom-procgen/   built     seeded terrain and chunk meshes, soft-part meshes; planned: a fibre texture, a sky
                                  (procgen.md)
-crates/loom-render/    planned   the wgpu renderer; the one crate that may hold `unsafe` (render.md)
+crates/loom-render/    built     the wgpu renderer, offscreen: the lit pass, the sky, tone mapping with FXAA; the
+                                 one crate that may hold `unsafe` (render.md)
 crates/loom-app/       planned   the winit window and loop, the pacer, input actions (app.md)
 crates/loom-ui/        later     an in-game UI, after its own decision
 crates/loom-audio/     later     sound, when a game first needs it
@@ -44,7 +45,7 @@ Rule numbers are given once and never reused; a gap is a rule that does not appl
 | # | Rule | Enforcer |
 |---|---|---|
 | R4 | `loom-core` depends on no other workspace crate | the graph test; fixture `core-uses-procgen` |
-| R5 | `#![forbid(unsafe_code)]` in every crate root | the graph test reads each `loom-*` crate root for the attribute, fixture `forbid-missing`; `unsafe_code = "forbid"` workspace-wide (`Cargo.toml`, gatekeeper's `rust/bans`). The planned `loom-render` is the one crate that may lift it: its exemption and the check that each of its `unsafe` blocks has a `// SAFETY:` line land with that crate, not before |
+| R5 | `#![forbid(unsafe_code)]` in every crate root | the graph test reads each `loom-*` crate root for the attribute, fixture `forbid-missing`; `unsafe_code = "forbid"` workspace-wide (`Cargo.toml`, gatekeeper's `rust/bans`). `loom-render` is the one crate that lifts it, to `#![deny(unsafe_code)]`: the graph test's `R5_LIFTED` table and gatekeeper's `[rust] unsafe_crates` name it alike, and `rust/bans` fails each of its `unsafe` blocks without a `// SAFETY:` line |
 | R6 | `bevy_ecs` is built without its `multi_threaded` feature; `glam` with `libm` | the graph test, on resolved features; fixtures `ecs-multi-threaded`, `glam-without-libm` |
 | R7 | A source file is at most 600 lines | `.drover/arch.toml` `[[size]]` on `crates/*/src/**/*.rs` and `xtask/src/**/*.rs` |
 | R10 | Only binaries touch files: no `std::fs` in a library | `.drover/arch.toml` `[[ban]]` of `std::fs` in `crates/*/src/**` |

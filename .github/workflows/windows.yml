@@ -9,6 +9,8 @@ jobs:
   test:
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      LOOM_GPU: required
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable

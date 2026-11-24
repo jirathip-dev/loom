@@ -11,6 +11,14 @@ dir = "docs/decisions"
 glob = "*.md"
 
 [[collect]]
+dir = "crates/loom-render/src/passes"
+glob = "*.rs"
+
+[[collect]]
+dir = "crates/loom-render/src/shaders"
+glob = "*.wgsl"
+
+[[collect]]
 dir = "ci/sim-lints/fixture/src"
 glob = "*.rs"
 

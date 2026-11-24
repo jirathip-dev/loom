@@ -1,11 +1,14 @@
 packs = ["core", "rust"]
 integration = "staging"
 
+[rust]
+unsafe_crates = ["loom-render"]
+
 [legs.macos]
 platform = "macos"
 setup = ["rust"]
 
 [pin]
-version = "1.1.2"
-aarch64-apple-darwin = "6952b2a2440e0bdf0ae511fa9333ce9205267afe130eaa33cf38478bffcf31ff"
-x86_64-unknown-linux-gnu = "b7064a09130cdd9f510f1632fce4c6e80998a6bc31af6b9114729dcb681f6118"
+version = "1.3.0"
+aarch64-apple-darwin = "0708ff694f4445faba78e6edfbed8238c534b5adb307b626e90813a4304ce1d7"
+x86_64-unknown-linux-gnu = "87165a73f4a1f26ebb053c48bcdb7c9446023032746f6fae603831bbf5e93b58"

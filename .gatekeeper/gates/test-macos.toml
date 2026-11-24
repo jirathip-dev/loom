@@ -4,4 +4,4 @@ budget_secs = 240
 setup = ["rust"]
 leg = "macos"
 paths = ["**/*.rs", "**/Cargo.toml", "Cargo.lock", "ci/lock"]
-run = "cargo test --workspace --locked"
+run = "LOOM_GPU=required cargo test --workspace --locked"
