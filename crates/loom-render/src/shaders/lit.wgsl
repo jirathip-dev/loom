@@ -7,6 +7,8 @@ struct Frame {
     light: vec4<f32>,
     ambient: vec4<f32>,
     sky: vec4<f32>,
+    inverse: mat4x4<f32>,
+    cascades: array<mat4x4<f32>, 3>,
 }
 
 struct Surface {
@@ -18,6 +20,9 @@ struct Surface {
 @group(1) @binding(0) var<uniform> surface: Surface;
 @group(1) @binding(1) var fibre: texture_2d<f32>;
 @group(1) @binding(2) var fibre_sampler: sampler;
+@group(2) @binding(0) var shadow_map: texture_depth_2d_array;
+@group(2) @binding(1) var shadow_sampler: sampler_comparison;
+@group(2) @binding(2) var occlusion: texture_2d<f32>;
 
 struct In {
     @location(0) at: vec3<f32>,
@@ -32,7 +37,7 @@ struct In {
 }
 
 struct Out {
-    @builtin(position) clip: vec4<f32>,
+    @builtin(position) @invariant clip: vec4<f32>,
     @location(0) world: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
@@ -44,7 +49,7 @@ fn vs_main(v: In) -> Out {
     let place = mat4x4<f32>(v.place0, v.place1, v.place2, v.place3);
     let world = place * vec4<f32>(v.at, 1.0);
     var out: Out;
-    out.clip = frame.view_proj * world;
+    out.clip = frame.view_proj * (place * vec4<f32>(v.at, 1.0));
     out.world = world.xyz;
     out.normal = normalize((place * vec4<f32>(v.normal, 0.0)).xyz);
     out.uv = v.uv;
@@ -89,6 +94,26 @@ fn ashikhmin(n_v: f32, n_l: f32) -> f32 {
     return 1.0 / max(4.0 * (n_l + n_v - n_l * n_v), 1e-5);
 }
 
+fn sunlit(world: vec3<f32>, n: vec3<f32>) -> f32 {
+    let texel = 1.0 / f32(textureDimensions(shadow_map).x);
+    for (var c = 0; c < 3; c++) {
+        let offset = n * 0.02 * f32(1 << u32(c));
+        let at = frame.cascades[c] * vec4<f32>(world + offset, 1.0);
+        let uv = vec2<f32>(at.x * 0.5 + 0.5, 0.5 - at.y * 0.5);
+        if all(uv > vec2<f32>(0.01)) && all(uv < vec2<f32>(0.99)) && at.z > 0.0 && at.z < 1.0 {
+            var lit = 0.0;
+            for (var x = -1; x <= 1; x++) {
+                for (var y = -1; y <= 1; y++) {
+                    let near = uv + vec2<f32>(f32(x), f32(y)) * texel;
+                    lit += textureSampleCompareLevel(shadow_map, shadow_sampler, near, c, at.z);
+                }
+            }
+            return lit / 9.0;
+        }
+    }
+    return 1.0;
+}
+
 @fragment
 fn fs_main(o: Out) -> @location(0) vec4<f32> {
     let texel = textureSample(fibre, fibre_sampler, o.uv);
@@ -106,6 +131,8 @@ fn fs_main(o: Out) -> @location(0) vec4<f32> {
     let specular = ggx(n_h, alpha) * smith(n_v, n_l, alpha) * fresnel;
     let diffuse = base / PI * (1.0 - fresnel);
     let sheen = surface.sheen_fuzz.rgb * charlie(n_h, surface.sheen_fuzz.w) * ashikhmin(n_v, n_l);
-    let direct = (diffuse + vec3<f32>(specular) + sheen) * frame.light.rgb * n_l;
-    return vec4<f32>(direct + frame.ambient.rgb * base, 1.0);
+    let shade = sunlit(o.world, normalize(o.normal));
+    let direct = (diffuse + vec3<f32>(specular) + sheen) * frame.light.rgb * n_l * shade;
+    let ao = textureLoad(occlusion, vec2<i32>(o.clip.xy), 0).r;
+    return vec4<f32>(direct + frame.ambient.rgb * base * ao, 1.0);
 }

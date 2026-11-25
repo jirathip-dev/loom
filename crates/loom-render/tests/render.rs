@@ -188,3 +188,77 @@ fn two_renders_of_one_scene_are_byte_identical() {
     assert_eq!(first.len(), 1920 * 1080 * 4);
     assert!(first == second, "the two renders differ");
 }
+
+fn lone_ball(gpu: &mut Gpu, towards: Vec3, light: [f32; 3], with_ball: bool) -> Vec<u8> {
+    let fibre = gpu.texture(&[128, 128, 255, 255], (1, 1));
+    let felt = gpu.material(&Material {
+        colour: [0.4, 0.4, 0.35],
+        sheen: [0.0; 3],
+        roughness: 0.9,
+        fuzz: 0.5,
+        fibre,
+    });
+    let (vertices, indices) = plane();
+    let ground = gpu.mesh(&vertices, &indices);
+    let mut scene = Scene::new(
+        eye(),
+        Light {
+            towards,
+            colour: light,
+        },
+        SKY,
+        [1.0; 3],
+    );
+    let at = |centre| Instance {
+        place: Mat4::from_translation(centre),
+        tint: [1.0; 4],
+    };
+    scene.draw(ground, felt, &[at(Vec3::ZERO)]);
+    if with_ball {
+        let (vertices, indices) = ball();
+        let ball = gpu.mesh(&vertices, &indices);
+        scene.draw(ball, felt, &[at(Vec3::new(0.0, RADIUS, 0.0))]);
+    }
+    gpu.render(&scene).unwrap();
+    gpu.pixels().unwrap()
+}
+
+#[test]
+fn a_balls_shadow_falls_away_from_the_light_and_moves_with_it() {
+    let Some(mut gpu) = gpu() else { return };
+    let (left, right) = (Vec3::new(-1.6, 0.0, 0.0), Vec3::new(1.6, 0.0, 0.0));
+    let from_left = lone_ball(&mut gpu, Vec3::new(-1.0, 1.0, 0.0), [3.0; 3], true);
+    let from_right = lone_ball(&mut gpu, Vec3::new(1.0, 1.0, 0.0), [3.0; 3], true);
+    let (lit, shaded) = (brightness(&from_left, left), brightness(&from_left, right));
+    assert!(
+        shaded + 60 < lit,
+        "light from the left: left {lit}, right {shaded}"
+    );
+    let (lit, shaded) = (
+        brightness(&from_right, right),
+        brightness(&from_right, left),
+    );
+    assert!(
+        shaded + 60 < lit,
+        "light from the right: right {lit}, left {shaded}"
+    );
+}
+
+#[test]
+fn the_crease_under_a_ball_is_darker_with_ambient_occlusion() {
+    let Some(mut gpu) = gpu() else { return };
+    let crease = Vec3::new(0.0, 0.0, 0.3);
+    let open = Vec3::new(3.0, 0.0, 2.0);
+    let with = lone_ball(&mut gpu, Vec3::Y, [0.0; 3], true);
+    let without = lone_ball(&mut gpu, Vec3::Y, [0.0; 3], false);
+    let (occluded, bare) = (brightness(&with, crease), brightness(&without, crease));
+    assert!(
+        occluded + 30 < bare,
+        "crease {occluded} with the ball, {bare} without"
+    );
+    let (near, far) = (brightness(&with, open), brightness(&without, open));
+    assert!(
+        near.abs_diff(far) <= 3,
+        "open ground {near} with the ball, {far} without"
+    );
+}

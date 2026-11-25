@@ -5,10 +5,11 @@
 ```
 crates/loom-core/      built     ticks, ids, random streams, canonical writer and state hash, state registry,
                                  input log, save header, the single-threaded schedule runner
-crates/loom-procgen/   built     seeded terrain and chunk meshes, soft-part meshes; planned: a fibre texture, a sky
+crates/loom-procgen/   built     seeded terrain and chunk meshes, soft-part meshes, a fibre texture, a sky
                                  (procgen.md)
-crates/loom-render/    built     the wgpu renderer, offscreen: the lit pass, the sky, tone mapping with FXAA; the
-                                 one crate that may hold `unsafe` (render.md)
+crates/loom-render/    built     the wgpu renderer, offscreen: shadow cascades, a prepass, ambient occlusion, the
+                                 lit pass, the sky, tone mapping with FXAA; the one crate that may hold
+                                 `unsafe` (render.md)
 crates/loom-app/       planned   the winit window and loop, the pacer, input actions (app.md)
 crates/loom-ui/        later     an in-game UI, after its own decision
 crates/loom-audio/     later     sound, when a game first needs it

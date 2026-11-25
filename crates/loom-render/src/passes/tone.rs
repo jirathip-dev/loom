@@ -1,4 +1,7 @@
-use wgpu::{BindGroupLayout, Device, RenderPipeline, TextureFormat};
+use crate::passes::lit::{Recipe, group, layout, pipeline, texture};
+use wgpu::{
+    BindGroupLayout, Device, RenderPipeline, TextureFormat, TextureSampleType, TextureViewDimension,
+};
 
 pub const OUTPUT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
@@ -9,57 +12,35 @@ pub struct Tone {
 
 impl Tone {
     pub fn new(device: &Device) -> Self {
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("tone"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            }],
-        });
-        let shader = device.create_shader_module(wgpu::include_wgsl!("../shaders/tone.wgsl"));
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("tone"),
-            bind_group_layouts: &[Some(&layout)],
-            immediate_size: 0,
-        });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("tone"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[],
+        let layout = layout(
+            device,
+            "tone",
+            &[texture(
+                0,
+                TextureSampleType::Float { filterable: false },
+                TextureViewDimension::D2,
+            )],
+        );
+        let pipeline = pipeline(
+            device,
+            Recipe {
+                label: "tone",
+                shader: wgpu::include_wgsl!("../shaders/tone.wgsl"),
+                layouts: &[&layout],
+                mesh: false,
+                cull: None,
+                target: Some(OUTPUT),
+                depth: None,
             },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(OUTPUT.into())],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        );
         Self { layout, pipeline }
     }
 
     pub fn bind(&self, device: &Device, hdr: &wgpu::TextureView) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("tone"),
-            layout: &self.layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(hdr),
-            }],
-        })
+        group(
+            device,
+            &self.layout,
+            &[wgpu::BindingResource::TextureView(hdr)],
+        )
     }
 }

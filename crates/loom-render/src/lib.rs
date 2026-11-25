@@ -8,7 +8,10 @@ mod gpu;
 mod scene;
 
 mod passes {
+    pub mod ao;
     pub mod lit;
+    pub mod prepass;
+    pub mod shadow;
     pub mod sky;
     pub mod tone;
 }

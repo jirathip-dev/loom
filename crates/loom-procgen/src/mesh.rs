@@ -169,6 +169,6 @@ fn at3(at: Vec2, height: f32) -> Vec3 {
     clippy::cast_sign_loss,
     reason = "the value is clamped to 0 to 255 first, so the cast only drops the fraction"
 )]
-fn byte(unit: f32) -> u8 {
+pub(crate) fn byte(unit: f32) -> u8 {
     (unit.clamp(0.0, 1.0) * 255.0).round() as u8
 }
