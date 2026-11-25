@@ -18,34 +18,39 @@ pub struct Shadow {
     pub cascades: [(Buffer, BindGroup); CASCADES],
 }
 
+fn maps(device: &Device) -> ([TextureView; CASCADES], TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("shadow"),
+        size: wgpu::Extent3d {
+            width: MAP_SIZE,
+            height: MAP_SIZE,
+            depth_or_array_layers: 3,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: DEPTH,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let layers = std::array::from_fn(|layer| {
+        texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2),
+            base_array_layer: u32::try_from(layer).unwrap_or(0),
+            array_layer_count: Some(1),
+            ..wgpu::TextureViewDescriptor::default()
+        })
+    });
+    let map = texture.create_view(&wgpu::TextureViewDescriptor {
+        dimension: Some(wgpu::TextureViewDimension::D2Array),
+        ..wgpu::TextureViewDescriptor::default()
+    });
+    (layers, map)
+}
+
 impl Shadow {
     pub fn new(device: &Device) -> Self {
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("shadow"),
-            size: wgpu::Extent3d {
-                width: MAP_SIZE,
-                height: MAP_SIZE,
-                depth_or_array_layers: 3,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: DEPTH,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let layers = std::array::from_fn(|layer| {
-            texture.create_view(&wgpu::TextureViewDescriptor {
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                base_array_layer: u32::try_from(layer).unwrap_or(0),
-                array_layer_count: Some(1),
-                ..wgpu::TextureViewDescriptor::default()
-            })
-        });
-        let map = texture.create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::D2Array),
-            ..wgpu::TextureViewDescriptor::default()
-        });
+        let (layers, map) = maps(device);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             compare: Some(CompareFunction::LessEqual),
             mag_filter: wgpu::FilterMode::Linear,
