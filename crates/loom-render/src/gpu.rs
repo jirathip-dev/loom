@@ -54,6 +54,7 @@ pub struct Gpu {
     meshes: Vec<Option<Mesh>>,
     textures: Vec<wgpu::TextureView>,
     materials: Vec<wgpu::BindGroup>,
+    window: Option<(wgpu::Surface<'static>, wgpu::SurfaceConfiguration)>,
 }
 
 fn block_on<F: Future>(future: F) -> F::Output {
@@ -168,17 +169,69 @@ fn ms(range: Range<Instant>) -> f32 {
     range.end.duration_since(range.start).as_secs_f32() * 1000.0
 }
 
+fn adapter(
+    instance: &wgpu::Instance,
+    surface: Option<&wgpu::Surface<'_>>,
+) -> Result<(wgpu::Adapter, wgpu::Device, wgpu::Queue), GpuError> {
+    let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        compatible_surface: surface,
+        ..wgpu::RequestAdapterOptions::default()
+    }))
+    .map_err(|e| GpuError::NoAdapter(e.to_string()))?;
+    let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+        .map_err(|e| GpuError::NoDevice(e.to_string()))?;
+    Ok((adapter, device, queue))
+}
+
 impl Gpu {
     /// A GPU that renders into an image of `size` pixels, with no window.
     pub fn offscreen(size: (u32, u32)) -> Result<Self, GpuError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-            .map_err(|e| GpuError::NoAdapter(e.to_string()))?;
-        let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
-            .map_err(|e| GpuError::NoDevice(e.to_string()))?;
+        let (_, device, queue) = adapter(&instance, None)?;
+        Ok(Self::new(device, queue, size, None))
+    }
+
+    /// A GPU that presents each rendered frame to `window`, `size` pixels large.
+    pub fn on_window(
+        window: impl Into<wgpu::SurfaceTarget<'static>>,
+        size: (u32, u32),
+    ) -> Result<Self, GpuError> {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let surface = instance
+            .create_surface(window)
+            .map_err(|e| GpuError::NoSurface(e.to_string()))?;
+        let (adapter, device, queue) = adapter(&instance, Some(&surface))?;
+        let formats = surface.get_capabilities(&adapter).formats;
+        let format = formats
+            .iter()
+            .copied()
+            .find(wgpu::TextureFormat::is_srgb)
+            .or(formats.first().copied())
+            .ok_or_else(|| GpuError::NoSurface("the adapter cannot present to it".into()))?;
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format,
+            color_space: wgpu::SurfaceColorSpace::Auto,
+            width: size.0.max(1),
+            height: size.1.max(1),
+            desired_maximum_frame_latency: 2,
+            present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
+        };
+        surface.configure(&device, &config);
+        Ok(Self::new(device, queue, size, Some((surface, config))))
+    }
+
+    fn new(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        size: (u32, u32),
+        window: Option<(wgpu::Surface<'static>, wgpu::SurfaceConfiguration)>,
+    ) -> Self {
         let lit = Lit::new(&device);
         let sky = Sky::new(&device, &lit.frame_layout);
-        let tone = Tone::new(&device);
+        let tone = Tone::new(&device, window.as_ref().map_or(OUTPUT, |(_, c)| c.format));
         let frame = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("frame"),
             size: size_of::<FrameUniform>().try_into().unwrap_or(0),
@@ -201,7 +254,7 @@ impl Gpu {
             ..wgpu::SamplerDescriptor::default()
         });
         let targets = targets(&device, size, &tone);
-        Ok(Self {
+        Self {
             flat: upload(&device, &queue, &[128, 128, 255, 255], (1, 1)),
             device,
             queue,
@@ -216,7 +269,19 @@ impl Gpu {
             meshes: Vec::new(),
             textures: Vec::new(),
             materials: Vec::new(),
-        })
+            window,
+        }
+    }
+
+    /// Resizes the image, and the window's surface on a window.
+    pub fn resize(&mut self, size: (u32, u32)) {
+        self.size = size;
+        self.targets = targets(&self.device, size, &self.tone);
+        if let Some((surface, config)) = &mut self.window {
+            config.width = size.0.max(1);
+            config.height = size.1.max(1);
+            surface.configure(&self.device, config);
+        }
     }
 
     pub fn mesh(&mut self, vertices: &[Vertex], indices: &[u32]) -> MeshId {
@@ -314,13 +379,20 @@ impl Gpu {
                 contents: bytemuck::cast_slice(&instances),
                 usage: wgpu::BufferUsages::VERTEX,
             });
+        let shown = self.acquire()?;
+        if self.window.is_some() && shown.is_none() {
+            return Ok(FrameStats::default());
+        }
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         self.lit_pass(&mut encoder, &instance_buffer, &draws);
-        self.tone_pass(&mut encoder);
+        self.tone_pass(&mut encoder, shown.as_ref());
         let submitted = Instant::now();
         self.queue.submit([encoder.finish()]);
+        if let Some(frame) = shown {
+            self.queue.present(frame);
+        }
         self.wait()?;
         let triangles = draws
             .iter()
@@ -332,6 +404,27 @@ impl Gpu {
             draws: u32::try_from(draws.len()).unwrap_or(u32::MAX),
             triangles,
         })
+    }
+
+    fn acquire(&self) -> Result<Option<wgpu::SurfaceTexture>, GpuError> {
+        let Some((surface, config)) = &self.window else {
+            return Ok(None);
+        };
+        match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame) => Ok(Some(frame)),
+            wgpu::CurrentSurfaceTexture::Suboptimal(_)
+            | wgpu::CurrentSurfaceTexture::Outdated
+            | wgpu::CurrentSurfaceTexture::Lost => {
+                surface.configure(&self.device, config);
+                Ok(None)
+            }
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                Ok(None)
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                Err(GpuError::NoSurface("acquiring a frame failed".into()))
+            }
+        }
     }
 
     fn lit_pass(
@@ -378,11 +471,19 @@ impl Gpu {
         pass.draw(0..3, 0..1);
     }
 
-    fn tone_pass(&self, encoder: &mut wgpu::CommandEncoder) {
+    fn tone_pass(&self, encoder: &mut wgpu::CommandEncoder, frame: Option<&wgpu::SurfaceTexture>) {
+        let view = frame.map_or_else(
+            || self.targets.output_view.clone(),
+            |frame| {
+                frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default())
+            },
+        );
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("tone"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &self.targets.output_view,
+                view: &view,
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
@@ -400,8 +501,11 @@ impl Gpu {
         pass.draw(0..3, 0..1);
     }
 
-    /// The last rendered image: RGBA8 in sRGB, row by row from the top left.
+    /// The last image rendered offscreen: RGBA8 in sRGB, row by row from the top left.
     pub fn pixels(&mut self) -> Result<Vec<u8>, GpuError> {
+        if self.window.is_some() {
+            return Err(GpuError::Readback("a window's frames are not kept".into()));
+        }
         let size = extent(self.size);
         let row = size.width * 4;
         let padded = row.div_ceil(ROW_ALIGN) * ROW_ALIGN;

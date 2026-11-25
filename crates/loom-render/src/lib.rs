@@ -50,7 +50,7 @@ pub struct TextureId(usize);
 pub struct MaterialId(usize);
 
 /// What one frame cost.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct FrameStats {
     pub cpu_ms: f32,
     pub gpu_ms: f32,
@@ -63,6 +63,7 @@ pub struct FrameStats {
 pub enum GpuError {
     NoAdapter(String),
     NoDevice(String),
+    NoSurface(String),
     FreedMesh(MeshId),
     UnknownMaterial(MaterialId),
     Readback(String),
@@ -73,6 +74,7 @@ impl std::fmt::Display for GpuError {
         match self {
             Self::NoAdapter(why) => write!(f, "no GPU adapter: {why}"),
             Self::NoDevice(why) => write!(f, "no GPU device: {why}"),
+            Self::NoSurface(why) => write!(f, "no window surface: {why}"),
             Self::FreedMesh(mesh) => write!(f, "{mesh:?} was freed"),
             Self::UnknownMaterial(material) => write!(f, "{material:?} is not on this GPU"),
             Self::Readback(why) => write!(f, "reading the frame back failed: {why}"),
