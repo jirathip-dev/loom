@@ -9,7 +9,7 @@ crates/loom-procgen/   built     seeded terrain and chunk meshes, soft-part mesh
                                  (procgen.md)
 crates/loom-render/    built     the wgpu renderer, offscreen: the lit pass, the sky, tone mapping with FXAA; the
                                  one crate that may hold `unsafe` (render.md)
-crates/loom-app/       planned   the winit window and loop, the pacer, input actions (app.md)
+crates/loom-app/       built     the winit window and loop, the pacer, input actions (app.md)
 crates/loom-ui/        later     an in-game UI, after its own decision
 crates/loom-audio/     later     sound, when a game first needs it
 xtask/                 built     `cargo xtask check`; the graph test and its fixtures

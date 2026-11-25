@@ -15,6 +15,19 @@ skip = [
     { crate = "hashbrown@0.16.1", reason = "bevy_platform 0.20 pins hashbrown 0.16; indexmap is on 0.17 (decision 001)" },
     { crate = "syn@2.0.119", reason = "bevy's derive macros are on syn 2; serde_derive and thiserror moved to syn 3 (decision 001)" },
     { crate = "rustc-hash@1.1.0", reason = "naga 30 is on rustc-hash 1; bevy_ecs reaches 2 through variadics_please (decision 002)" },
+    { crate = "objc2@0.5.3", reason = "winit 0.30 is on objc2 0.5; wgpu 30 is on 0.6 (decision 003)" },
+    { crate = "block2@0.5.1", reason = "winit 0.30's objc2 0.5 family; wgpu 30 is on 0.6 (decision 003)" },
+    { crate = "objc2-foundation@0.2.2", reason = "winit 0.30's objc2 0.5 family; wgpu 30 is on 0.3 (decision 003)" },
+    { crate = "bitflags@1.3.2", reason = "winit 0.30's core-graphics 0.23 is on bitflags 1 (decision 003)" },
+    { crate = "windows-sys@0.52.0", reason = "winit 0.30 is on windows-sys 0.52; gilrs and wgpu reach newer (decision 003)" },
+    { crate = "windows-sys@0.59.0", reason = "rustix 0.38 under winit 0.30's calloop is on windows-sys 0.59 (decision 003)" },
+    { crate = "rustix@0.38.44", reason = "winit 0.30's calloop 0.13 is on rustix 0.38; x11rb reaches 1 (decision 003)" },
+    { crate = "linux-raw-sys@0.4.15", reason = "rustix 0.38 under winit 0.30's calloop (decision 003)" },
+    { crate = "thiserror@1.0.69", reason = "winit 0.30's calloop 0.13 and ndk 0.9 are on thiserror 1 (decision 003)" },
+    { crate = "thiserror-impl@1.0.69", reason = "thiserror 1 under winit 0.30 (decision 003)" },
+    { crate = "jni-sys@0.3.1", reason = "Android only: winit 0.30's ndk 0.9 is on jni-sys 0.3 (decision 003)" },
+    { crate = "redox_syscall@0.4.1", reason = "Redox only: winit 0.30 is on redox_syscall 0.4 (decision 003)" },
+    { crate = "redox_syscall@0.5.18", reason = "Redox only: parking_lot_core is on 0.5 while winit 0.30's orbclient reaches 0.9 (decision 003)" },
 ]
 
 [sources]

@@ -8,7 +8,7 @@ pub struct Tone {
 }
 
 impl Tone {
-    pub fn new(device: &Device) -> Self {
+    pub fn new(device: &Device, format: TextureFormat) -> Self {
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("tone"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -44,7 +44,7 @@ impl Tone {
                 module: &shader,
                 entry_point: Some("fs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(OUTPUT.into())],
+                targets: &[Some(format.into())],
             }),
             multiview_mask: None,
             cache: None,

@@ -50,9 +50,11 @@ gpu.render(&scene)?;
 
 `Gpu::offscreen` and `pixels` render to an image with no window, for tests and for a caller's screenshots.
 
-Built so far: `offscreen`, `mesh`, `free`, `texture`, `material`, `render` and `pixels`; the lit pass, the sky
-and tone mapping with FXAA. A fibre texture's rgb is a tangent-space normal and its alpha the fibre's shade.
-Planned: `on_window`, `resize`, the shadow cascades, the prepass and ambient occlusion.
+Built so far: `on_window`, `offscreen`, `resize`, `mesh`, `free`, `texture`, `material`, `render` and
+`pixels`; the lit pass, the sky and tone mapping with FXAA. A fibre texture's rgb is a tangent-space normal and
+its alpha the fibre's shade. On a window, `render` presents the frame and skips it while the surface is lost
+or covered; `pixels` reads offscreen images only. Planned: the shadow cascades, the prepass and ambient
+occlusion.
 
 ## Tests
 

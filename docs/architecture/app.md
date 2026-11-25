@@ -1,4 +1,4 @@
-# loom-app (planned)
+# loom-app
 
 The window and its event loop through `winit`, the pacer that turns real time into simulation ticks, and an
 input layer that turns keys, mouse and gamepad into the caller's own actions. It knows no game type; the tick
@@ -39,6 +39,8 @@ impl Pacer {
 - An action's `value` is the sum of its sources, each times its `scale`, clamped to -1 to 1. A key or a button
   is 0 or 1; a stick has a dead zone. `pressed` is true on the frame the value leaves 0. The caller asks for
   actions, never for a key or a button.
+- `Actions::feed` takes one raw `Input` (a key, a mouse button, the wheel, the cursor's move, a pad button
+  or a stick) and `Actions::step` folds the frame's input into the values; the loop calls both, and a test can.
 - `Pacer::add` returns the whole ticks now due, at most 8 a frame; time beyond that is dropped, so a slow
   frame slows the simulation and never freezes it. `alpha` is how far the clock is into the next tick, 0 to 1,
   for drawing between two ticks.
