@@ -49,7 +49,7 @@ pub struct Pixels { pub size: (u32, u32), pub rgba: Vec<u8> }
 
 ## Recipes
 
-`Map`, `Biome` and `Model` are built; `Sky` and `fibre_map` are planned.
+`Map`, `Biome`, `Model`, `Sky` and `fibre_map` are built.
 
 Plain `serde` types; the caller reads them from wherever it keeps its data.
 
@@ -86,7 +86,9 @@ pub fn fibre_map(seed: Seed, size: u32) -> Pixels;
   of its two half-ball ends; a patch is a 1 cm thick oval of felt `size` across in x and y, facing z.
 - `Felt` is the cloth material's parameters, handed to the renderer as they are.
 - `Sky::at` gives the one light's direction and colour, the sky and the ambient light for a time of day,
-  blended between the keys.
+  blended between the keys. Time is in hours, 0 to 24, and wraps; a key's `at` is its hour. The light is
+  highest at noon and never below the horizon: at night it is the moon. `Sky::default()` is a plain day of
+  four keys, with a dim blue night.
 - `fibre_map` is one tileable texture: fibre density and a normal map. Every material uses it at its own scale.
 
 ## Usage

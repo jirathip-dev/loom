@@ -1,5 +1,8 @@
 use crate::passes::{
-    lit::{DEPTH, HDR, Lit},
+    ao::{Ao, OCCLUSION},
+    lit::{DEPTH, HDR, Lit, group},
+    prepass::{NORMAL, Prepass},
+    shadow::{CASCADES, Shadow, cascades},
     sky::Sky,
     tone::{OUTPUT, Tone},
 };
@@ -22,6 +25,8 @@ struct FrameUniform {
     light: [f32; 4],
     ambient: [f32; 4],
     sky: [f32; 4],
+    inverse: Mat4,
+    cascades: [Mat4; CASCADES],
 }
 
 struct Mesh {
@@ -33,10 +38,16 @@ struct Mesh {
 struct Targets {
     hdr: wgpu::TextureView,
     depth: wgpu::TextureView,
+    normal: wgpu::TextureView,
+    occlusion: wgpu::TextureView,
     output: wgpu::Texture,
     output_view: wgpu::TextureView,
     tone: wgpu::BindGroup,
+    ao: wgpu::BindGroup,
+    light: wgpu::BindGroup,
 }
+
+type Drawn<'a> = (&'a Mesh, &'a wgpu::BindGroup, Range<u32>);
 
 /// A GPU device with the passes, the uploaded meshes, textures and materials, and its render targets.
 pub struct Gpu {
@@ -46,6 +57,9 @@ pub struct Gpu {
     lit: Lit,
     sky: Sky,
     tone: Tone,
+    shadow: Shadow,
+    prepass: Prepass,
+    ao: Ao,
     frame: wgpu::Buffer,
     frame_group: wgpu::BindGroup,
     sampler: wgpu::Sampler,
@@ -93,26 +107,103 @@ fn target(
     })
 }
 
-fn targets(device: &wgpu::Device, size: (u32, u32), tone: &Tone) -> Targets {
+fn targets(device: &wgpu::Device, size: (u32, u32), gpu: (&Tone, &Ao, &Lit, &Shadow)) -> Targets {
+    let (tone, ao, lit, shadow) = gpu;
     let usage = wgpu::TextureUsages::RENDER_ATTACHMENT;
-    let hdr = target(
-        device,
-        size,
-        HDR,
-        usage | wgpu::TextureUsages::TEXTURE_BINDING,
-    )
-    .create_view(&wgpu::TextureViewDescriptor::default());
-    let depth =
-        target(device, size, DEPTH, usage).create_view(&wgpu::TextureViewDescriptor::default());
+    let sampled = |format| {
+        target(
+            device,
+            size,
+            format,
+            usage | wgpu::TextureUsages::TEXTURE_BINDING,
+        )
+        .create_view(&wgpu::TextureViewDescriptor::default())
+    };
+    let (hdr, depth, normal, occlusion) = (
+        sampled(HDR),
+        sampled(DEPTH),
+        sampled(NORMAL),
+        sampled(OCCLUSION),
+    );
     let output = target(device, size, OUTPUT, usage | wgpu::TextureUsages::COPY_SRC);
     let output_view = output.create_view(&wgpu::TextureViewDescriptor::default());
-    let tone = tone.bind(device, &hdr);
+    let light = group(
+        device,
+        &lit.light_layout,
+        &[
+            wgpu::BindingResource::TextureView(&shadow.map),
+            wgpu::BindingResource::Sampler(&shadow.sampler),
+            wgpu::BindingResource::TextureView(&occlusion),
+        ],
+    );
     Targets {
+        tone: tone.bind(device, &hdr),
+        ao: ao.bind(device, &depth, &normal),
+        light,
         hdr,
         depth,
+        normal,
+        occlusion,
         output,
         output_view,
-        tone,
+    }
+}
+
+fn begin<'e>(
+    encoder: &'e mut wgpu::CommandEncoder,
+    label: &str,
+    colour: Option<&wgpu::TextureView>,
+    depth: Option<(&wgpu::TextureView, wgpu::LoadOp<f32>)>,
+) -> wgpu::RenderPass<'e> {
+    let colour = colour.map(|view| wgpu::RenderPassColorAttachment {
+        view,
+        depth_slice: None,
+        resolve_target: None,
+        ops: wgpu::Operations {
+            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+            store: wgpu::StoreOp::Store,
+        },
+    });
+    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some(label),
+        color_attachments: if colour.is_some() {
+            std::slice::from_ref(&colour)
+        } else {
+            &[]
+        },
+        depth_stencil_attachment: depth.map(|(view, load)| {
+            wgpu::RenderPassDepthStencilAttachment {
+                view,
+                depth_ops: Some(wgpu::Operations {
+                    load,
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }
+        }),
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    })
+}
+
+fn geometry(
+    pass: &mut wgpu::RenderPass<'_>,
+    instances: &wgpu::Buffer,
+    draws: &[Drawn],
+    material_slot: Option<u32>,
+) {
+    if instances.size() == 0 {
+        return;
+    }
+    pass.set_vertex_buffer(1, instances.slice(..));
+    for (mesh, material, range) in draws {
+        if let Some(slot) = material_slot {
+            pass.set_bind_group(slot, *material, &[]);
+        }
+        pass.set_vertex_buffer(0, mesh.vertices.slice(..));
+        pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..mesh.count, 0, range.clone());
     }
 }
 
@@ -150,17 +241,20 @@ fn upload(
 
 fn frame_uniform(scene: &Scene) -> FrameUniform {
     let eye = scene.eye.view.inverse().w_axis;
+    let view_proj = scene.eye.proj * scene.eye.view;
     let light = scene.light.towards;
     let [lr, lg, lb] = scene.light.colour;
     let [ar, ag, ab] = scene.ambient;
     let [sr, sg, sb] = scene.sky;
     FrameUniform {
-        view_proj: scene.eye.proj * scene.eye.view,
+        view_proj,
         eye: eye.to_array(),
         towards: [light.x, light.y, light.z, 0.0],
         light: [lr, lg, lb, 0.0],
         ambient: [ar, ag, ab, 0.0],
         sky: [sr, sg, sb, 0.0],
+        inverse: view_proj.inverse(),
+        cascades: cascades(view_proj, light),
     }
 }
 
@@ -179,20 +273,16 @@ impl Gpu {
         let lit = Lit::new(&device);
         let sky = Sky::new(&device, &lit.frame_layout);
         let tone = Tone::new(&device);
+        let shadow = Shadow::new(&device);
+        let prepass = Prepass::new(&device, &lit.frame_layout);
+        let ao = Ao::new(&device, &lit.frame_layout);
         let frame = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("frame"),
             size: size_of::<FrameUniform>().try_into().unwrap_or(0),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let frame_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("frame"),
-            layout: &lit.frame_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: frame.as_entire_binding(),
-            }],
-        });
+        let frame_group = group(&device, &lit.frame_layout, &[frame.as_entire_binding()]);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
@@ -200,7 +290,7 @@ impl Gpu {
             min_filter: wgpu::FilterMode::Linear,
             ..wgpu::SamplerDescriptor::default()
         });
-        let targets = targets(&device, size, &tone);
+        let targets = targets(&device, size, (&tone, &ao, &lit, &shadow));
         Ok(Self {
             flat: upload(&device, &queue, &[128, 128, 255, 255], (1, 1)),
             device,
@@ -209,6 +299,9 @@ impl Gpu {
             lit,
             sky,
             tone,
+            shadow,
+            prepass,
+            ao,
             frame,
             frame_group,
             sampler,
@@ -262,25 +355,16 @@ impl Gpu {
                 usage: wgpu::BufferUsages::UNIFORM,
             });
         let fibre = self.textures.get(material.fibre.0).unwrap_or(&self.flat);
-        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("material"),
-            layout: &self.lit.material_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(fibre),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
+        let bound = group(
+            &self.device,
+            &self.lit.material_layout,
+            &[
+                uniform.as_entire_binding(),
+                wgpu::BindingResource::TextureView(fibre),
+                wgpu::BindingResource::Sampler(&self.sampler),
             ],
-        });
-        self.materials.push(group);
+        );
+        self.materials.push(bound);
         MaterialId(self.materials.len() - 1)
     }
 
@@ -307,6 +391,10 @@ impl Gpu {
         let frame = frame_uniform(scene);
         self.queue
             .write_buffer(&self.frame, 0, bytemuck::bytes_of(&frame));
+        for ((buffer, _), cascade) in self.shadow.cascades.iter().zip(&frame.cascades) {
+            self.queue
+                .write_buffer(buffer, 0, bytemuck::bytes_of(cascade));
+        }
         let instance_buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -317,8 +405,7 @@ impl Gpu {
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        self.lit_pass(&mut encoder, &instance_buffer, &draws);
-        self.tone_pass(&mut encoder);
+        self.passes(&mut encoder, &instance_buffer, &draws);
         let submitted = Instant::now();
         self.queue.submit([encoder.finish()]);
         self.wait()?;
@@ -334,69 +421,44 @@ impl Gpu {
         })
     }
 
-    fn lit_pass(
+    fn passes(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         instances: &wgpu::Buffer,
-        draws: &[(&Mesh, &wgpu::BindGroup, Range<u32>)],
+        draws: &[Drawn],
     ) {
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("lit"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &self.targets.hdr,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &self.targets.depth,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        pass.set_bind_group(0, &self.frame_group, &[]);
-        if instances.size() > 0 {
-            pass.set_pipeline(&self.lit.pipeline);
-            pass.set_vertex_buffer(1, instances.slice(..));
-            for (mesh, material, range) in draws {
-                pass.set_bind_group(1, *material, &[]);
-                pass.set_vertex_buffer(0, mesh.vertices.slice(..));
-                pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..mesh.count, 0, range.clone());
-            }
+        let targets = &self.targets;
+        let clear = wgpu::LoadOp::Clear(1.0);
+        for (layer, (_, cascade)) in self.shadow.layers.iter().zip(&self.shadow.cascades) {
+            let mut pass = begin(encoder, "shadow", None, Some((layer, clear)));
+            pass.set_pipeline(&self.shadow.pipeline);
+            pass.set_bind_group(0, cascade, &[]);
+            geometry(&mut pass, instances, draws, None);
         }
+        let depth = Some((&targets.depth, clear));
+        let mut pass = begin(encoder, "prepass", Some(&targets.normal), depth);
+        pass.set_pipeline(&self.prepass.pipeline);
+        pass.set_bind_group(0, &self.frame_group, &[]);
+        geometry(&mut pass, instances, draws, None);
+        drop(pass);
+        let mut pass = begin(encoder, "ao", Some(&targets.occlusion), None);
+        pass.set_pipeline(&self.ao.pipeline);
+        pass.set_bind_group(0, &self.frame_group, &[]);
+        pass.set_bind_group(1, &targets.ao, &[]);
+        pass.draw(0..3, 0..1);
+        drop(pass);
+        let depth = Some((&targets.depth, wgpu::LoadOp::Load));
+        let mut pass = begin(encoder, "lit", Some(&targets.hdr), depth);
+        pass.set_bind_group(0, &self.frame_group, &[]);
+        pass.set_bind_group(2, &targets.light, &[]);
+        pass.set_pipeline(&self.lit.pipeline);
+        geometry(&mut pass, instances, draws, Some(1));
         pass.set_pipeline(&self.sky.pipeline);
         pass.draw(0..3, 0..1);
-    }
-
-    fn tone_pass(&self, encoder: &mut wgpu::CommandEncoder) {
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("tone"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &self.targets.output_view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
+        drop(pass);
+        let mut pass = begin(encoder, "tone", Some(&targets.output_view), None);
         pass.set_pipeline(&self.tone.pipeline);
-        pass.set_bind_group(0, &self.targets.tone, &[]);
+        pass.set_bind_group(0, &targets.tone, &[]);
         pass.draw(0..3, 0..1);
     }
 

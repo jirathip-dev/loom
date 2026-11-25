@@ -21,5 +21,9 @@ fn every_shader_validates_without_a_gpu() {
         .unwrap_or_else(|e| panic!("{}: {}", path.display(), e.emit_to_string(&source)));
         checked.push(path);
     }
-    assert_eq!(checked.len(), 3, "lit, sky and tone: {checked:?}");
+    assert_eq!(
+        checked.len(),
+        6,
+        "ao, lit, prepass, shadow, sky and tone: {checked:?}"
+    );
 }

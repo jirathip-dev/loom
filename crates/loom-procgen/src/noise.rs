@@ -26,26 +26,37 @@ impl Noise {
         f32::from(u16::try_from(h >> 48).unwrap_or(0)) / 65_536.0
     }
 
-    fn value(self, p: Vec2) -> f32 {
+    fn value(self, p: Vec2, period: Option<f32>) -> f32 {
+        let wrap = |v: f32| period.map_or(v, |cells| v.rem_euclid(cells));
         let x = libm::floorf(p.x);
         let z = libm::floorf(p.y);
         let (fx, fz) = (fade(p.x - x), fade(p.y - z));
-        let top = lerp(self.lattice(x, z), self.lattice(x + 1.0, z), fx);
-        let bottom = lerp(self.lattice(x, z + 1.0), self.lattice(x + 1.0, z + 1.0), fx);
+        let (x0, x1, z0, z1) = (wrap(x), wrap(x + 1.0), wrap(z), wrap(z + 1.0));
+        let top = lerp(self.lattice(x0, z0), self.lattice(x1, z0), fx);
+        let bottom = lerp(self.lattice(x0, z1), self.lattice(x1, z1), fx);
         lerp(top, bottom, fz)
     }
 
     pub fn fbm(self, p: Vec2, octaves: u32) -> f32 {
-        let (mut sum, mut total, mut amp, mut at) = (0.0, 0.0, 1.0, p);
+        self.layered(p, octaves, None)
+    }
+
+    pub fn tiled_fbm(self, p: Vec2, octaves: u32, period: f32) -> f32 {
+        self.layered(p, octaves, Some(period))
+    }
+
+    fn layered(self, p: Vec2, octaves: u32, period: Option<f32>) -> f32 {
+        let (mut sum, mut total, mut amp, mut at, mut cells) = (0.0, 0.0, 1.0, p, period);
         for octave in 0..octaves {
             let layer = Self {
                 layer: self.layer ^ (u64::from(octave) << 40),
                 ..self
             };
-            sum += amp * layer.value(at);
+            sum += amp * layer.value(at, cells);
             total += amp;
             amp *= 0.5;
             at *= 2.0;
+            cells = cells.map(|c| c * 2.0);
         }
         ((sum / total - 0.5) * 2.2 + 0.5).clamp(0.0, 1.0)
     }
